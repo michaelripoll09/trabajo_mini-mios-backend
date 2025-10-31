@@ -184,6 +184,36 @@ def listar_archivos_importados(
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@router.delete("/imported-files/{lote_id}", response_model=dict)
+def eliminar_lote(lote_id: str, db: Session = Depends(get_db)):
+    """Elimina permanentemente todos los registros del lote dado."""
+    try:
+        archivos = db.query(ArchivoImportado).order_by(ArchivoImportado.id.asc()).all()
+        eliminados = 0
+        ids_eliminados = []
+        
+        for a in archivos:
+            d = dict(a.datos or {}) if a.datos else {}
+            # Comparar lote_id como string, asegurando que coincida exactamente
+            lote_id_en_datos = str(d.get('lote_id', ''))
+            if lote_id_en_datos == str(lote_id):
+                ids_eliminados.append(a.id)
+                db.delete(a)
+                eliminados += 1
+        
+        if eliminados > 0:
+            db.flush()  # Asegurar que las eliminaciones se registren antes del commit
+            db.commit()
+            logger.info(f"Lote {lote_id} eliminado: {eliminados} registros eliminados (IDs: {ids_eliminados})")
+            return {"success": True, "message": f"Lote {lote_id} eliminado", "registros_eliminados": eliminados}
+        else:
+            logger.warning(f"No se encontraron registros para el lote {lote_id}")
+            return {"success": False, "error": f"No se encontraron registros para el lote {lote_id}"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error eliminando lote {lote_id}: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
 @router.delete("/imported-files", response_model=dict)
 def eliminar_todos_los_importados(db: Session = Depends(get_db)):
     """
